@@ -18,5 +18,6 @@ Main tools:
 -one-click setup of normal or bump map
 
 
-<img width="248" height="338" alt="disp and bump" src="https://github.com/user-attachments/assets/e1f612ec-5462-495a-9667-7fe5eaa54bec" />
+<img width="854" height="616" alt="CompatMAT" src="https://github.com/user-attachments/assets/1eb7c4e7-c94c-47d0-8192-28add5c34502" />
+
 
