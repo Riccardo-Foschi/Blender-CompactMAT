@@ -17,3 +17,6 @@ Main tools:
 
 -one-click setup of normal or bump map
 
+
+<img width="248" height="338" alt="disp and bump" src="https://github.com/user-attachments/assets/e1f612ec-5462-495a-9667-7fe5eaa54bec" />
+
