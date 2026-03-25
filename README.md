@@ -13,6 +13,7 @@ Main tools:
 -setup normal or bump map with one click
 
 
-<img width="854" height="616" alt="CompatMAT" src="https://github.com/user-attachments/assets/1eb7c4e7-c94c-47d0-8192-28add5c34502" />
+<img width="1052" height="512" alt="image" src="https://github.com/user-attachments/assets/2d097604-9c06-472e-82d1-3d414f543ac3" />
+
 
 
