@@ -1,7 +1,7 @@
 bl_info = {
     "name": "EasyMAT",
     "author": "Riccardo Foschi + Gemini 3.1",
-    "version": (1, 13),
+    "version": (1, 17),
     "blender": (3, 0, 0),
     "location": "Shader Editor > Sidebar > EasyMAT",
     "description": "Helps create and assign materials in an easy way without needing to have a mesh selected or to link materials",
@@ -62,15 +62,84 @@ def get_or_create_mapping(mat):
     if not mapping:
         mapping = tree.nodes.new('ShaderNodeMapping')
         mapping.name = "CompactMAT_Mapping"
-        mapping.location = (-1000, -200)
     if not tex_coord:
         tex_coord = tree.nodes.new('ShaderNodeTexCoord')
         tex_coord.name = "CompactMAT_TexCoord"
-        tex_coord.location = (-1200, -200)
     if not mapping.inputs['Vector'].is_linked:
         tree.links.new(tex_coord.outputs['UV'], mapping.inputs['Vector'])
         
     return mapping
+
+def align_nodes(mat):
+    """Automatically organizes nodes to close gaps, align columns, and place intermediaries under the BSDF."""
+    bsdf = get_bsdf(mat)
+    if not bsdf: return
+    
+    bsdf_x, bsdf_y = bsdf.location.x, bsdf.location.y
+    tex_x = bsdf_x - 350  # Fixed column for textures
+    
+    output = next((n for n in mat.node_tree.nodes if n.type == 'OUTPUT_MATERIAL'), None)
+    if output:
+        output.location = (bsdf_x + 350, bsdf_y)
+    
+    # Position Intermediary Nodes neatly UNDER the Principled BSDF
+    norm_socket = get_socket(mat, ["Normal"])
+    if norm_socket and norm_socket.is_linked:
+        norm_node = norm_socket.links[0].from_node
+        if norm_node.type in {'NORMAL_MAP', 'BUMP'}:
+            norm_node.location = (bsdf_x, bsdf_y - 650)
+            
+    if output:
+        disp_socket = output.inputs.get("Displacement")
+        if disp_socket and disp_socket.is_linked:
+            disp_node = disp_socket.links[0].from_node
+            if disp_node.type == 'DISPLACEMENT':
+                disp_node.location = (bsdf_x, bsdf_y - 850)
+
+    # Re-stack textures dynamically to close any gaps
+    ordered_sockets = ["Base Color", "Metallic", "Roughness", "Alpha", "Normal", "Displacement"]
+    current_y = bsdf_y
+    
+    for s_name in ordered_sockets:
+        sock = None
+        if s_name == "Displacement" and output:
+            sock = output.inputs.get("Displacement")
+        elif s_name == "Metallic":
+            sock = get_socket(mat, ["Metallic Weight", "Metallic"])
+        else:
+            sock = get_socket(mat, [s_name])
+            
+        if not sock or not sock.is_linked: continue
+        
+        tex_node = None
+        first_node = sock.links[0].from_node
+        
+        # Traverse backward to find the actual image texture
+        if s_name == "Normal":
+            if first_node.type in {'NORMAL_MAP', 'BUMP'}:
+                inner_sock = first_node.inputs.get('Color') if first_node.type == 'NORMAL_MAP' else first_node.inputs.get('Height')
+                if inner_sock and inner_sock.is_linked:
+                    tex_node = inner_sock.links[0].from_node
+        elif s_name == "Displacement":
+            if first_node.type == 'DISPLACEMENT':
+                inner_sock = first_node.inputs.get('Height')
+                if inner_sock and inner_sock.is_linked:
+                    tex_node = inner_sock.links[0].from_node
+        else:
+            if first_node.type == 'TEX_IMAGE':
+                tex_node = first_node
+                
+        # If an image texture exists for this slot, align it and drop the Y position
+        if tex_node and tex_node.type == 'TEX_IMAGE':
+            tex_node.location = (tex_x, current_y)
+            current_y -= 300
+            
+    # Position mapping nodes neatly to the left
+    mapping = mat.node_tree.nodes.get("CompactMAT_Mapping")
+    tex_coord = mat.node_tree.nodes.get("CompactMAT_TexCoord")
+    
+    if mapping: mapping.location = (tex_x - 220, bsdf_y)
+    if tex_coord: tex_coord.location = (tex_x - 420, bsdf_y)
 
 def connect_texture(mat, img, target_socket_name, context_type="COLOR", normal_mode='NORMAL'):
     tree = mat.node_tree
@@ -86,21 +155,10 @@ def connect_texture(mat, img, target_socket_name, context_type="COLOR", normal_m
     if not socket: return False
     
     mapping = get_or_create_mapping(mat)
-    
-    base_x = socket.node.location.x - 300 if hasattr(socket, 'node') else -300
-    base_y = 0
-    if hasattr(socket, 'node') and socket.node:
-        try:
-            idx = list(socket.node.inputs).index(socket)
-            base_y = socket.node.location.y + 200 - (idx * 280)
-        except ValueError:
-            base_y = socket.node.location.y
-
-    op_rm = bpy.ops.easymat.remove_texture(socket_name=target_socket_name, context_type=context_type)
+    bpy.ops.easymat.remove_texture(socket_name=target_socket_name, context_type=context_type)
 
     tex_node = tree.nodes.new('ShaderNodeTexImage')
     tex_node.image = img
-    tex_node.location = (base_x, base_y)
     tree.links.new(mapping.outputs['Vector'], tex_node.inputs['Vector'])
 
     if context_type == "NORMAL":
@@ -110,15 +168,16 @@ def connect_texture(mat, img, target_socket_name, context_type="COLOR", normal_m
         else:
             node = tree.nodes.new('ShaderNodeBump')
             tree.links.new(tex_node.outputs['Color'], node.inputs['Height'])
-        node.location = (base_x + 150, base_y)
         tree.links.new(node.outputs['Normal'], socket)
     elif context_type == "DISP":
         disp_node = tree.nodes.new('ShaderNodeDisplacement')
-        disp_node.location = (base_x + 150, base_y)
+        disp_node.inputs['Scale'].default_value = 0.1
         tree.links.new(tex_node.outputs['Color'], disp_node.inputs['Height'])
         tree.links.new(disp_node.outputs['Displacement'], socket)
     else:
         tree.links.new(tex_node.outputs['Color'], socket)
+        
+    align_nodes(mat) # Auto-organize layout
     return True
 
 def get_object_under_mouse(context, event):
@@ -198,36 +257,31 @@ class COMPACTMAT_OT_new_material(bpy.types.Operator):
         return {'FINISHED'}
 
 class COMPACTMAT_OT_remove_material(bpy.types.Operator):
+    """Clear all materials from selected meshes"""
     bl_idname = "easymat.remove_material"
-    bl_label = "Unassign Active Material"
+    bl_label = "Unassign Materials"
     bl_options = {'REGISTER', 'UNDO'}
 
     @classmethod
     def poll(cls, context):
-        return context.scene.compactmat_active_material is not None
+        return len(context.selected_objects) > 0
 
     def execute(self, context):
-        mat = context.scene.compactmat_active_material
-        
-        if not context.selected_objects:
-            self.report({'WARNING'}, "No objects selected to unassign from.")
-            return {'CANCELLED'}
-
         count = 0
         for obj in context.selected_objects:
             if obj.type == 'MESH':
-                for i in range(len(obj.data.materials) - 1, -1, -1):
-                    if obj.data.materials[i] == mat:
-                        obj.data.materials.pop(index=i)
-                        count += 1
+                if len(obj.data.materials) > 0:
+                    obj.data.materials.clear()
+                    count += 1
         
         if count > 0:
-            self.report({'INFO'}, f"Unassigned material from {count} slots.")
+            self.report({'INFO'}, f"Cleared materials from {count} meshes.")
         else:
-            self.report({'INFO'}, "Material was not found on selected meshes.")
+            self.report({'INFO'}, "No materials to clear on selected meshes.")
             
         for window in context.window_manager.windows:
             for area in window.screen.areas: area.tag_redraw()
+            
         return {'FINISHED'}
 
 class COMPACTMAT_OT_assign_material(bpy.types.Operator):
@@ -320,6 +374,7 @@ class COMPACTMAT_OT_upload_all_textures(bpy.types.Operator, ImportHelper):
             if any(x in name for x in ['color', 'albedo', 'diff', 'col', 'base']): target = "Base Color"
             elif any(x in name for x in ['rough', 'rgh']): target = "Roughness"
             elif any(x in name for x in ['metal', 'met', 'mtl']): target = "Metallic"
+            elif any(x in name for x in ['alpha', 'opacity', 'transparency', 'mask']): target = "Alpha"
             elif any(x in name for x in ['norm', 'nrm', 'nd']): target = "Normal"; c_type = "NORMAL"
             elif any(x in name for x in ['disp', 'height']): target = "Displacement"; c_type = "DISP"
             
@@ -329,6 +384,10 @@ class COMPACTMAT_OT_upload_all_textures(bpy.types.Operator, ImportHelper):
                     try: img.colorspace_settings.name = 'Non-Color'
                     except: pass
                 connect_texture(mat, img, target, c_type, context.scene.compactmat_normal_mode)
+                
+                if target == "Alpha" and context.scene.render.engine != 'CYCLES':
+                    if hasattr(mat, "blend_method"): mat.blend_method = 'HASHED'
+                    if hasattr(mat, "shadow_method"): mat.shadow_method = 'HASHED'
                 
         return {'FINISHED'}
 
@@ -345,12 +404,17 @@ class COMPACTMAT_OT_add_texture(bpy.types.Operator, ImportHelper):
         mat = context.scene.compactmat_active_material
         img = bpy.data.images.load(self.filepath)
         
-        non_color_triggers = ["Metallic", "Roughness", "Normal", "Bump", "Displacement", "Weight", "IOR", "Scale"]
+        non_color_triggers = ["Metallic", "Roughness", "Alpha", "Normal", "Bump", "Displacement", "Weight", "IOR", "Scale"]
         if any(trig in self.socket_name for trig in non_color_triggers) or self.context_type in ["NORMAL", "DISP"]:
             try: img.colorspace_settings.name = 'Non-Color'
             except: pass
 
         connect_texture(mat, img, self.socket_name, self.context_type, context.scene.compactmat_normal_mode)
+        
+        if self.socket_name == "Alpha" and context.scene.render.engine != 'CYCLES':
+            if hasattr(mat, "blend_method"): mat.blend_method = 'HASHED'
+            if hasattr(mat, "shadow_method"): mat.shadow_method = 'HASHED'
+            
         return {'FINISHED'}
 
 class COMPACTMAT_OT_remove_texture(bpy.types.Operator):
@@ -386,6 +450,8 @@ class COMPACTMAT_OT_remove_texture(bpy.types.Operator):
             nodes_to_remove.append(linked_node)
 
         for n in nodes_to_remove: tree.nodes.remove(n)
+        
+        align_nodes(mat) # Automatically close the gap!
         return {'FINISHED'}
 
 # -------------------------------------------------------------------
@@ -396,6 +462,7 @@ class CompactmatUIProps(bpy.types.PropertyGroup):
     show_base_color: bpy.props.BoolProperty(default=False)
     show_metallic: bpy.props.BoolProperty(default=False)
     show_roughness: bpy.props.BoolProperty(default=False)
+    show_alpha: bpy.props.BoolProperty(default=False)
     show_normal: bpy.props.BoolProperty(default=False)
     show_displacement: bpy.props.BoolProperty(default=False)
     show_subsurface: bpy.props.BoolProperty(default=False)
@@ -461,7 +528,6 @@ class COMPACTMAT_PT_main_panel(bpy.types.Panel):
         if mat:
             layout.prop(mat, "name", text="Name")
 
-        # Create a visually "blue" button by tricking Blender's toggle depress system
         row = layout.row()
         row.operator("easymat.new_material", text="New", icon='ADD', depress=True)
         
@@ -493,6 +559,7 @@ class COMPACTMAT_PT_main_panel(bpy.types.Panel):
         draw_box("show_base_color", "Base Color", lambda c: draw_socket_row(c, get_socket(mat, ["Base Color"])))
         draw_box("show_metallic", "Metallic", lambda c: draw_socket_row(c, get_socket(mat, ["Metallic Weight", "Metallic"])))
         draw_box("show_roughness", "Roughness", lambda c: draw_socket_row(c, get_socket(mat, ["Roughness"])))
+        draw_box("show_alpha", "Alpha", lambda c: draw_socket_row(c, get_socket(mat, ["Alpha"])))
         
         def draw_normal(c):
             c.prop(scene, "compactmat_normal_mode", text="Mode")
