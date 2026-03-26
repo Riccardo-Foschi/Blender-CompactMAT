@@ -2,6 +2,8 @@
 Blender plugin for simplified creation and application of materials
 
 -----> [Download the Blender plugin from here!](https://github.com/Riccardo-Foschi/Blender-EasyMAT/releases/download/v1.17/EasyMAT.py) <-----
+[Watch a video tutorial here](https://youtu.be/MOTegrY_dxY )
+
 
 A plugin for Blender that simplifies the creation and application of materials without needing to use nodes.
 
@@ -20,5 +22,4 @@ Main tools:
 
 <img width="1052" height="512" alt="image" src="https://github.com/user-attachments/assets/2d097604-9c06-472e-82d1-3d414f543ac3" />
 
-[Watch a video tutorial here](https://youtu.be/MOTegrY_dxY )
 
