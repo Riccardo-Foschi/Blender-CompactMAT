@@ -22,7 +22,6 @@ Main tools:
 
 -setup normal or bump map with one click
 
-
-<img width="1052" height="512" alt="image" src="https://github.com/user-attachments/assets/2d097604-9c06-472e-82d1-3d414f543ac3" />
+<img width="2106" height="1153" alt="image" src="https://github.com/user-attachments/assets/09103e54-0af9-4989-81a8-1e22eaa154de" />
 
 
