@@ -3,7 +3,7 @@ Blender plugin for simplified creation and application of materials
 
 <h3 align="center">
   
------> [Download the Blender plugin from here!](https://github.com/Riccardo-Foschi/Blender-EasyMAT/releases/download/v3.0/EasyMAT.zip)<-----
+-----> [Download the Blender plugin from here!](https://github.com/Riccardo-Foschi/Blender-EasyMAT/releases/download/v3.1.0/EasyMAT.zip)<-----
 
 <sub> [Watch a video tutorial here](https://www.youtube.com/watch?v=Ey5h9RxmtuY)
 </h3>
